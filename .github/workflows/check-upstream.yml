@@ -1,0 +1,69 @@
+name: Check Upstream Updates
+
+on:
+  schedule:
+    # Run every day at 09:00 UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch: {}  # Allow manual triggering
+
+jobs:
+  check-upstream:
+    name: Detect new/changed strings in upstream pacman
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream pacman
+        uses: actions/checkout@v4
+        with:
+          repository: archlinux/pacman
+          path: pacman-upstream
+          # Track the main development branch
+          ref: master
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gettext
+
+      - name: Run update-translations.sh
+        id: update
+        # exit code 1 means changes were found, which is not a failure here
+        run: |
+          chmod +x scripts/update-translations.sh
+          if ./scripts/update-translations.sh --upstream-dir ./pacman-upstream; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show diff
+        if: steps.update.outputs.changed == 'true'
+        run: git diff po/
+
+      - name: Create Pull Request with updated .po files
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync with upstream pacman translations"
+          branch: upstream-sync/auto-update
+          delete-branch: true
+          title: "chore: sync with upstream pacman"
+          body: |
+            Upstream pacman has new or changed translatable strings.
+
+            This PR was automatically created by the **Check Upstream Updates** workflow.
+            Please review the diff in the `.po` files and translate any new `msgstr ""` entries.
+
+            ### How to translate
+            Open the `.po` files and fill in the `msgstr` for any blank or `#, fuzzy` entries.
+          labels: |
+            translations
+            upstream-sync

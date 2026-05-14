@@ -1,0 +1,30 @@
+name: Translation Progress
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'po/**'
+
+jobs:
+  progress:
+    name: Report translation progress
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gettext
+
+      - name: Report progress (plain text)
+        run: |
+          chmod +x scripts/translation-stats.sh
+          ./scripts/translation-stats.sh
+
+      - name: Write progress to Job Summary
+        run: |
+          ./scripts/translation-stats.sh --markdown >> "$GITHUB_STEP_SUMMARY"

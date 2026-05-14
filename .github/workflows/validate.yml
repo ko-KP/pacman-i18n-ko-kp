@@ -1,0 +1,66 @@
+name: Validate Translations
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'po/**'
+      - 'meson.build'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'po/**'
+      - 'meson.build'
+
+jobs:
+  validate:
+    name: Compile and validate .po files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gettext meson
+
+      - name: Check .po file format consistency (no-wrap)
+        run: |
+          echo "Checking .po file formatting (no-wrap)..."
+          for po in po/*.po; do
+            echo "Formatting check: $po"
+            tmpfile=$(mktemp --suffix=.po)
+            msgcat --no-wrap "$po" -o "$tmpfile"
+            # Compare only non-comment lines to avoid version-specific flag stripping issues
+            if ! diff -q <(grep -v '^#' "$po") <(grep -v '^#' "$tmpfile") > /dev/null 2>&1; then
+              echo "::error file=$po::$po is not formatted correctly (has wrapped lines). Run: msgcat --no-wrap $po -o $po"
+              diff <(grep -v '^#' "$po") <(grep -v '^#' "$tmpfile") || true
+              rm -f "$tmpfile"
+              exit 1
+            fi
+            rm -f "$tmpfile"
+          done
+          echo "All .po files are correctly formatted."
+
+
+
+      - name: Check .po file syntax with msgfmt
+        run: |
+          echo "Validating .po files..."
+          for po in po/*.po; do
+            echo "Checking $po..."
+            msgfmt --check --statistics -o /dev/null "$po"
+          done
+
+      - name: Build .mo files with Meson
+        run: |
+          meson setup build
+          meson compile -C build
+
+      - name: Report translation progress
+        run: |
+          chmod +x scripts/translation-stats.sh
+          ./scripts/translation-stats.sh
+          ./scripts/translation-stats.sh --markdown >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gettext meson ninja-build
+
+      - name: Build .mo files
+        run: |
+          meson setup build --prefix=/usr
+          meson compile -C build
+
+      - name: Install into staging directory
+        run: |
+          DESTDIR=$(pwd)/pkg meson install -C build
+
+      - name: Create release tarball
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKGNAME="pacman-i18n-ko-kp-${TAG}"
+          mv pkg "${PKGNAME}"
+          tar -czvf "${PKGNAME}.tar.gz" "${PKGNAME}"
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKGNAME="pacman-i18n-ko-kp-${TAG}"
+          echo "sha256=$(sha256sum "${PKGNAME}.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: pacman-i18n-ko-kp-*.tar.gz
+          body: |
+            ## pacman-i18n-ko-kp ${{ github.ref_name }}
+
+            Korean (ko_KP) translations for pacman.
+
+            ### Install with makepkg
+            Update the `source=` and `sha256sums=` in your `PKGBUILD`:
+            ```
+            source=("https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/pacman-i18n-ko-kp-${{ github.ref_name }}.tar.gz")
+            sha256sums=('${{ steps.sha.outputs.sha256 }}')
+            ```
+
+            ### Manual install
+            ```bash
+            tar -xzvf pacman-i18n-ko-kp-${{ github.ref_name }}.tar.gz
+            sudo cp -r pacman-i18n-ko-kp-${{ github.ref_name }}/usr /
+            ```

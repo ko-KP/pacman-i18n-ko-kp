@@ -1,0 +1,8 @@
+*.mo
+*.pkg.tar.*
+*.tar.gz
+*.tar.xz
+*.tar.zst
+build/
+pkg/
+src/
